@@ -67,10 +67,8 @@ hcloud server create \
     --ssh-key $SSH_KEYS \
     --type $SERVER_TYPE \
     --volume $VOLUME_NAME \
+    --firewall $FIREWALL_NAME
     # --user-data-from-file cloud-config.yaml
-
-# Apply the firewall to the server
-hcloud firewall apply-to-resource $FIREWALL_NAME --server $SERVER_NAME --type server
 
 # Start the server
 hcloud server poweron $SERVER_NAME
