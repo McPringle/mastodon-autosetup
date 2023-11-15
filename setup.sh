@@ -61,7 +61,7 @@ hcloud server create \
     --name $SERVER_NAME \
     --ssh-key $SSH_KEYS \
     --type $SERVER_TYPE \
-    # --user-data-from-file ci-mastodon.yaml
+    # --user-data-from-file cloud-config.yaml
 
 ## Create volume if needed or attach existing volume
 if [ -z "$(hcloud volume list -o noheader -o columns=name | grep $VOLUME_NAME)" ]; then
