@@ -1,0 +1,386 @@
+#cloud-config
+apt_update: true
+apt_upgrade: false
+packages:
+- htop
+- git
+- apparmor
+- bat
+- binutils
+- chafa
+- httpie
+- mlocate
+- neofetch
+- msmtp
+- msmtp-mta
+- ca-certificates
+- curl
+- gnupg
+- lsb-release
+- fail2ban
+- python3-systemd
+- ncdu
+
+write_files:
+- content: |
+    [DEFAULT]
+    # Debian 12 has no log files, just journalctl
+    backend = systemd  
+    # "bantime" is the number of seconds that a host is banned.
+    bantime  = 1d
+    # "maxretry" is the number of failures before a host get banned.
+    maxretry = 2
+    # A host is banned if it has generated "maxretry" during the last "findtime"
+    findtime  = 1h
+    [sshd]
+    enabled = true
+  path: /etc/fail2ban/jail.local
+- content: |
+    # Set default values for all following accounts.
+    defaults
+    port 587
+    # Always use TLS.
+    tls on
+    tls_starttls off
+    # Mail account
+    account web
+    # Host name of the SMTP server
+    host {{MAIL_HOST}}
+    # Envelope-from address
+    from {{MAIL_FROM}}
+    set_from_header on
+    auth on
+    user {{MAIL_USER}}
+    password {{MAIL_PASSWORD}}
+    # Set a default account
+    account default: web
+    aliases /etc/aliases
+  path: /etc/msmtprc
+- content: |
+    root: {{MAIL_ROOT}}
+
+  path: /etc/aliases
+- content: |
+    ## Dynamic configuration
+    http:
+      middlewares:
+        permanent-http-to-https:
+          redirectScheme:
+            permanent: true
+            scheme: https
+        compress:
+          compress: true
+  path: /run/traefik/traefik-dynamic.yaml
+- content: |
+    ## traefik.yaml
+    # Docker configuration backend
+    providers:
+      docker:
+        exposedbydefault: false
+      file:
+        filename: /etc/traefik/traefik-dynamic.yaml
+        watch: true
+    # API and dashboard configuration
+    api:
+      insecure: true
+    entryPoints:
+      web:
+        address: ":80"
+      websecure:
+        address: ":443"
+        http:
+          tls:
+            certResolver: myresolver
+            domains:
+              - main: {{DOMAIN_NAME}}
+    certificatesResolvers:
+      myresolver:
+        acme:
+          email: {{SSL_EMAIL}}
+          storage: /etc/traefik-acme/acme.json
+          httpChallenge:
+            entryPoint: web
+  path: /run/traefik/traefik.yaml
+- content: |
+    [Unit]
+    Description=Mastodon Docker Compose Service
+    Requires=docker.service
+    After=docker.service
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    WorkingDirectory=/root/mastodon
+    ExecStart=/usr/bin/docker compose up -d
+    ExecStop=/usr/bin/docker compose down
+    TimeoutStartSec=0
+
+    [Install]
+    WantedBy=multi-user.target
+  path: /etc/systemd/system/mastodon-compose.service
+- content: |
+    #!/bin/sh
+    set -e
+    date
+    docker exec mastodon-postgres-1 pg_dump -f /root/backup/postgres-mastodon.dump -Z 9 -c -C --if-exists -U postgres mastodon
+    zgrep "dump complete" /root/backup/postgres-mastodon.dump
+    ls -lh /root/backup/postgres-mastodon.dump  | awk '{print $5 " " $7 " " $6 " " $8 " " $9}'
+    date
+  path: /etc/cron.daily/backup
+- content: |
+    #!/bin/bash
+    set -e
+    df -h / /mnt/{{VOLUME_NAME}}
+    
+    echo ---
+    docker exec --user root mastodon-mastodon-1 tootctl media usage 
+    
+  path: /root/mastodon/check-disksize.sh
+- content: |
+    #!/bin/bash
+    
+    CACHE_DAYS=100
+    date
+    
+    # Remove remote statuses that local users never interacted with older than X days:
+    docker exec --user root mastodon-mastodon-1 tootctl statuses remove --days $CACHE_DAYS
+    # Remove locally cached copies of media attachments older than X days:
+    docker exec --user root mastodon-mastodon-1 tootctl media remove --days $CACHE_DAYS
+    # Remove locally cached headers of remote profiles older than X days:
+    docker exec --user root mastodon-mastodon-1 tootctl media remove --remove-headers --days $CACHE_DAYS
+    # Remove locally cached profiles of remote profiles older than X days:
+    docker exec --user root mastodon-mastodon-1 tootctl media remove --prune-profiles --days $CACHE_DAYS
+    # Remove link previews older than X days:
+    docker exec --user root mastodon-mastodon-1 tootctl preview_cards remove --days $CACHE_DAYS
+    # Remove files not linked to any posts:
+    docker exec --user root mastodon-mastodon-1 tootctl media remove-orphans
+    date
+    echo ---
+    docker exec --user root mastodon-mastodon-1 tootctl media usage
+  path: /root/mastodon/clean-mastodon-cache
+- content: |
+    {
+      "ipv6": true,
+      "fixed-cidr-v6": "fd00:ffff::/80"
+    }
+  path: /etc/docker/daemon.json
+- content: |
+    SINGLE_USER_MODE=false
+    LOCAL_DOMAIN={{SSL_DOMAIN}}
+    WEB_DOMAIN={{SSL_DOMAIN}}
+    ALTERNATE_DOMAINS={{SSL_DOMAIN}}
+    REDIS_HOST=redis
+    REDIS_PORT=6379
+    REDIS_PASSWORT=
+    DB_HOST=db
+    DB_PORT=5432
+    DB_USER=mastodon
+    DB_NAME=mastodon
+    DB_PASS={{DB_PASS}}
+    ES_ENABLED=false
+    SECRET_KEY_BASE={{SECRET_KEY_BASE}}
+    OTP_SECRET={{OTP_SECRET}}
+    VAPID_PRIVATE_KEY=={{VAPID_PRIVATE_KEY}}
+    VAPID_PUBLIC_KEY={{VAPID_PUBLIC_KEY}}
+    SMTP_SERVER={{MAIL_HOST}}
+    SMTP_PORT=587
+    SMTP_LOGIN={{MAIL_USER}}
+    SMTP_PASSWORD={{MAIL_PASSWORD}}
+    SMTP_AUTH_METHOD=plain
+    SMTP_OPENSSL_VERIFY_MODE=none
+    SMTP_TLS=true
+    SMTP_FROM_ADDRESS=Mastodon {{MAIL_FROM}}
+    S3_ENABLED=false
+    IP_RETENTION_PERIOD=31556952
+    SESSION_RETENTION_PERIOD=31556952
+  path: /root/mastodon/mastodon.env
+- content: |
+    version: '3.7'
+    services:
+      jond:
+        restart: unless-stopped
+        image: registry.gitlab.com/mkarg/javaonkubernetes
+        volumes:
+          - type: bind
+            source: /mnt/{{VOLUME_NAME}}
+            target: /mnt/{{VOLUME_NAME}}
+            read_only: true
+        networks:
+          - inter-net
+        environment:
+          - "MONITORED_PATHS=/:/mnt/{{VOLUME_NAME}}/"
+        labels:
+          - "traefik.enable=true"
+          - "traefik.http.routers.jond.rule=Host(`{{SSL_DOMAIN}}`)&&PathPrefix(`/question`)"
+          - "traefik.http.routers.jond.entrypoints=websecure"
+          - "traefik.docker.network=mastodon_inter-net"
+      postgres:
+        restart: unless-stopped
+        image: postgres:16
+        shm_size: 256m
+        volumes:
+          - type: bind
+            source: /mnt/{{VOLUME_NAME}}/postgres/data
+            target: /var/lib/postgresql/data
+          - type: bind
+            source: /root/backup
+            target: /root/backup
+        networks:
+          postgres-net:
+            aliases:
+              - db
+        environment:
+          - "POSTGRES_PASSWORD={{DB_PASS}}"
+          - "PGDATA=/var/lib/postgresql/data/pgdata"
+        healthcheck:
+          test: ['CMD', 'pg_isready', '-U', 'postgres']
+      redis:
+        restart: unless-stopped
+        image: redis:7-alpine
+        networks:
+          - redis-net
+        healthcheck:
+          test: ['CMD', 'redis-cli', 'ping']
+        volumes:
+          - redis-data:/data
+      sidekiq:
+        image: tootsuite/mastodon:v4.2
+        restart: unless-stopped
+        env_file: mastodon.env
+        command: bundle exec sidekiq
+        depends_on:
+          - postgres
+          - redis
+        networks:
+          - inter-net
+          - redis-net
+          - postgres-net
+        volumes:
+          - /mnt/{{VOLUME_NAME}}/mastodon:/mastodon/public/system
+        healthcheck:
+          test: ['CMD-SHELL', "ps aux | grep '[s]idekiq\ 6' || false"]
+      mastodon:
+        image: tootsuite/mastodon:v4.2
+        restart: unless-stopped
+        env_file: mastodon.env
+        command: bash -c "rm -f /mastodon/tmp/pids/server.pid; bundle exec rails s -p 3000"
+        depends_on:
+          - postgres
+          - redis
+        networks:
+          - inter-net
+          - redis-net
+          - postgres-net
+        volumes:
+          - /mnt/{{VOLUME_NAME}}/mastodon:/mastodon/public/system
+        healthcheck:
+          test: ['CMD-SHELL', 'wget -q --spider --proxy=off localhost:3000/health || exit 1']
+        labels:
+          - "traefik.enable=true"
+          - "traefik.http.routers.mastodon.entrypoints=websecure"
+          - "traefik.http.routers.mastodon.rule=Host(`{{DOMAIN_NAME}}`)"
+          - "traefik.http.routers.mastodon.middlewares=compress@file"
+          - "traefik.http.routers.masto-http.entrypoints=web"
+          - "traefik.http.routers.masto-http.rule=Host(`{{DOMAIN_NAME}}`)"
+          - "traefik.http.routers.masto-http.middlewares=permanent-http-to-https@file"
+          - "traefik.http.routers.masto-http.service=noop@internal"
+          - "traefik.http.services.mastodon.loadbalancer.server.port=3000"
+          - "traefik.docker.network=mastodon_inter-net"
+      streaming:
+        image: tootsuite/mastodon:v4.2
+        restart: unless-stopped
+        env_file: mastodon.env
+        command: node ./streaming
+        depends_on:
+          - postgres
+          - redis
+        networks:
+          - inter-net
+          - redis-net
+          - postgres-net
+        healthcheck:
+          test: ['CMD-SHELL', 'wget -q --spider --proxy=off localhost:4000/api/v1/streaming/health || exit 1']
+        labels:
+          - "traefik.enable=true"
+          - "traefik.http.routers.streaming.entrypoints=websecure"
+          - "traefik.http.routers.streaming.rule=Host(`{{DOMAIN_NAME}}`)&&PathPrefix(`/api/v1/streaming`)"
+          - "traefik.http.routers.streaming.middlewares=compress@file"
+          - "traefik.http.services.streaming.loadbalancer.server.port=4000"
+          - "traefik.docker.network=mastodon_inter-net"
+      traefik:
+        restart: unless-stopped
+        image: traefik:v2.9
+        volumes:
+          - type: bind
+            source: /var/run/docker.sock
+            target: /var/run/docker.sock
+          - type: volume
+            source: traefik-config
+            target: /etc/traefik
+          - type: bind
+            source: /mnt/{{VOLUME_NAME}}/traefik
+            target: /etc/traefik-acme
+        ports:
+          - "8080:8080"
+          - "80:80"
+          - "443:443"
+        networks:
+          inter-net:
+      accounts_refresh:
+        image: docker
+        tty: true
+        command: docker exec -it --user mastodon mastodon-mastodon-1 tootctl accounts refresh --all --concurrency 2
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+        depends_on:
+          - mastodon
+    volumes:
+      redis-data:
+      mastodon-data:
+      traefik-config:
+        external: true
+    networks:
+      redis-net:
+        internal: true
+      inter-net:
+        driver: bridge
+        driver_opts:
+          com.docker.network.enable_ipv6: "true"
+        ipam:
+          driver: default
+          config:
+            - subnet: fd00:ffff::/80
+      postgres-net: {}
+  path: /root/mastodon/docker-compose.yaml
+
+runcmd:
+- timedatectl set-timezone Europe/Berlin
+- ln -s /usr/bin/batcat /usr/bin/bat
+- echo "alias ll='ls -la'" >> /root/.profile
+- echo "echo" >> /root/.profile
+- echo "neofetch" >> /root/.profile
+- sed -i 's/false/true/' /etc/default/sysstat
+- dpkg-reconfigure -f noninteractive sysstat
+- chmod +x /etc/cron.daily/backup
+- chmod +x /root/mastodon/clean-mastodon-cache
+- ln -s /root/mastodon/clean-mastodon-cache /etc/cron.weekly/clean-mastodon-cache
+- chmod +x /root/mastodon/check-disksize.sh
+- ln -s /root/mastodon/check-disksize.sh /etc/cron.daily/check-disksize
+- mkdir /root/backup
+- mkdir /mnt/{{VOLUME_NAME}}
+- mount -o discard,defaults /dev/disk/by-id/scsi-0HC_Volume_25652763 /mnt/{{VOLUME_NAME}}
+- echo /dev/disk/by-id/scsi-0HC_Volume_25652763 /mnt/{{VOLUME_NAME}} xfs discard,nofail,defaults 0 0 >> /etc/fstab
+- service networking restart
+- mkdir -p /etc/apt/keyrings
+- curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+- chmod a+r /etc/apt/keyrings/docker.gpg
+- echo   "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+- apt update
+- apt install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+- docker volume create traefik-config
+- docker run --rm -v "/run/traefik:/source" -v "traefik-config:/dest" -w /source alpine cp traefik-dynamic.yaml /dest
+- docker run --rm -v "/run/traefik:/source" -v "traefik-config:/dest" -w /source alpine cp traefik.yaml /dest
+- mkdir --parent /var/lib/docker/volumes/mastodon_mastodon-data/_data
+- chown -R 991:991 /var/lib/docker/volumes/mastodon_mastodon-data/_data
+- systemctl enable mastodon-compose
+- reboot
