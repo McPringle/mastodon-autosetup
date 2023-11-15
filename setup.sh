@@ -1,12 +1,6 @@
 #!/bin/bash
 set -e
 
-###############################################
-#        This is the settings section.        #
-# You can modify the settings for your needs. #
-###############################################
-
-# You need to fill in the following information:
 CONTEXT_NAME=""
 SSH_KEYS=""
 
@@ -19,20 +13,21 @@ SERVER_NAME="mastodon-server"
 VOLUME_NAME="mastodon-volume"
 FIREWALL_NAME="mastodon-firewall"
 
+source ./setup.conf
+
 #########################################
 #       This is the script section.     #
-# Please do not modify the lines below. #
 #########################################
 
 # Check for the context name
 if [ -z $CONTEXT_NAME ]; then
-    echo "Please edit this script add your Hetzner cloud context name on line 10."
+    echo "Please create or edit the file 'setup.conf' and add your Hetzner cloud context name."
     exit 1;
 fi
 
 # Check for the SSH keys
 if [ -z $SSH_KEYS ]; then
-    echo "Please edit this script add your SSH key names comma separated on line 11."
+    echo "Please create or edit the file 'setup.conf' and add your Hetzner SSH key name."
     exit 1;
 fi
 
