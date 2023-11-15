@@ -45,6 +45,11 @@ if [ -z "$(hcloud firewall list -o noheader -o columns=name | grep $FIREWALL_NAM
     hcloud firewall create --name $FIREWALL_NAME --rules-file firewall-config.json
 fi
 
+# Create volume if needed
+if [ -z "$(hcloud volume list -o noheader -o columns=name | grep $VOLUME_NAME)" ]; then
+    hcloud volume create --name $VOLUME_NAME --server $SERVER_NAME --size 10 --automount --format ext4
+fi
+
 # Shutdown and delete server (IPs will be preserved)
 if [ ! -z "$(hcloud server list -o noheader -o columns=name | grep $SERVER_NAME)" ]; then
     hcloud server shutdown $SERVER_NAME
@@ -61,14 +66,8 @@ hcloud server create \
     --name $SERVER_NAME \
     --ssh-key $SSH_KEYS \
     --type $SERVER_TYPE \
+    --volume $VOLUME_NAME \
     # --user-data-from-file cloud-config.yaml
-
-## Create volume if needed or attach existing volume
-if [ -z "$(hcloud volume list -o noheader -o columns=name | grep $VOLUME_NAME)" ]; then
-    hcloud volume create --name $VOLUME_NAME --server $SERVER_NAME --size 10 --automount --format ext4
-else
-    hcloud volume attach --server $SERVER_NAME $VOLUME_NAME
-fi
 
 # Apply the firewall to the server
 hcloud firewall apply-to-resource $FIREWALL_NAME --server $SERVER_NAME --type server
