@@ -2,6 +2,20 @@
 
 A script to automatically setup a running Mastodon instance in the Hetzner cloud.
 
+## Requirements
+
+Requires `hcloud` CLI. See https://github.com/hetznercloud/cli#installation for installation instructions.
+
+## Usage
+
+1. Use the first 3 steps of https://github.com/hetznercloud/cli#getting-started to configure the CLI access to your Hetzner Cloud Account.
+
+2. Copy `setup.conf.tpl` to `setup.conf`: `cp setup.conf.tpl setup.conf`.
+
+3. fill in the parameters in `setup.conf`.
+
+
+
 ## Copyright and License
 
 [AGPL License](https://www.gnu.org/licenses/agpl-3.0.de.html)
