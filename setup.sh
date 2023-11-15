@@ -52,7 +52,6 @@ fi
 
 # Shutdown and delete server (IPs will be preserved)
 if [ ! -z "$(hcloud server list -o noheader -o columns=name | grep $SERVER_NAME)" ]; then
-    hcloud server shutdown $SERVER_NAME
     hcloud server delete $SERVER_NAME
 fi
 
