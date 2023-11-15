@@ -60,7 +60,7 @@ fi
 hcloud server create \
     --primary-ipv4 ${SERVER_NAME}-ipv4 \
     --primary-ipv6 ${SERVER_NAME}-ipv6 \
-    --start-after-create=false \
+    --start-after-create=true \
     --datacenter $DATA_CENTER \
     --image debian-12 \
     --name $SERVER_NAME \
@@ -69,9 +69,6 @@ hcloud server create \
     --volume $VOLUME_NAME \
     --firewall $FIREWALL_NAME
     # --user-data-from-file cloud-config.yaml
-
-# Start the server
-hcloud server poweron $SERVER_NAME
 
 # Enable daily server backup
 hcloud server enable-backup $SERVER_NAME
