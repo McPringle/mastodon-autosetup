@@ -52,6 +52,7 @@ fi
 
 # Shutdown and delete server (IPs will be preserved)
 if [ ! -z "$(hcloud server list -o noheader -o columns=name | grep $SERVER_NAME)" ]; then
+    hcloud server disable-protection $SERVER_NAME delete rebuild
     hcloud server delete $SERVER_NAME
 fi
 
@@ -68,6 +69,9 @@ hcloud server create \
     --volume $VOLUME_NAME \
     --firewall $FIREWALL_NAME
     # --user-data-from-file cloud-config.yaml
+
+# Protect the server agains accidental deletion
+hcloud server enable-protection $SERVER_NAME delete rebuild
 
 # Enable daily server backup
 hcloud server enable-backup $SERVER_NAME
