@@ -1,18 +1,16 @@
 #!/bin/bash
 set -e
 
+# Default values - DON't MODIFY!
 CONTEXT_NAME=""
 SSH_KEYS=""
-
-# Modify the server type and data center when needed
 SERVER_TYPE="cpx11"
 DATA_CENTER="fsn1-dc14"
-
-# Usually you don't need to modify the following settings
 SERVER_NAME="mastodon-server"
 VOLUME_NAME="mastodon-volume"
 FIREWALL_NAME="mastodon-firewall"
 
+# Create a file called "setup.conf" and overwrite all of above default values you want to modify.
 source ./setup.conf
 
 #########################################
